@@ -1,0 +1,14 @@
+query_id,query_text,doc_id,score
+0,juneteenth,4,1
+1,taxes,7,3
+1,taxes,12,2
+1,taxes,15,1
+2,firearms,13,2
+2,firearms,11,3
+2,firearms,8,1
+3,artificial intelligence,6,1
+4,students,14,3
+4,students,10,2
+4,students,2,1
+5,health,17,2
+5,health,3,1

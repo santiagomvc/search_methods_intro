@@ -12,8 +12,8 @@ def text_preprocess(text):
     text = text.lower()
     return text
 
-def build_run(df, doc_id_col="chunk_id"):
-    run_df = df.copy()
+def build_run(results_df, doc_id_col="chunk_id"):
+    run_df = results_df.copy()
     run = Run.from_df(
         df=run_df,
         q_id_col="query_id",
@@ -40,8 +40,8 @@ doc_ids = []
 chunk_ids = []
 chunk_texts = []
 for _, row in texts_df.iterrows():
-    doc_id = row["doc_id"]
-    doc_chunk_texts = text_splitter.split_text(row["text"])
+    doc_id = str(row["doc_id"])
+    doc_chunk_texts = text_splitter.split_text(row["doc_text"])
     n_chunk_texts = len(doc_chunk_texts)
     doc_chunk_ids = [f"{doc_id}-{str(i)}" for i in range(n_chunk_texts)]
     # basic text processing
@@ -125,7 +125,7 @@ def colbert_search(query_text, RAG=RAG, df=df):
     return colbert_df
 
 # Fusion rank search
-def combined_search(query_text, norm="min-max", method="max"):
+def combined_search(query_text, norm="min-max", method="max", df=df):
     bm25_df = bm25_search(query_text)
     sent_df = sentsim_search(query_text)
     colbert_df = colbert_search(query_text)
@@ -134,6 +134,7 @@ def combined_search(query_text, norm="min-max", method="max"):
     for run_df in [bm25_df, sent_df, colbert_df]:
         # Adds a random query id since it's necessary for the run
         run_df["query_id"] = "0"
+        run_df["chunk_id"] = run_df["chunk_id"].astype(str)
         run = build_run(run_df)
         runs.append(run)
     ## Combining scores
@@ -168,6 +169,7 @@ def search(query_text, mode="bm25"):
 def evaluate_search(mode="bm25", queries_df=queries_df):
     # Create Qrel for evaluation
     queries_df["query_id"] = queries_df["query_id"].astype(str)
+    queries_df["doc_id"] = queries_df["doc_id"].astype(str)
     queries_df.loc[queries_df["score"] > 0, "score"] = 1
     # Replace all positive score with 1 for simplicity
     qrels = Qrels.from_df(
@@ -186,6 +188,7 @@ def evaluate_search(mode="bm25", queries_df=queries_df):
         results_list.append(response_df)
 
     results_df = pd.concat(results_list)
+    results_df["doc_id"] = results_df["doc_id"].astype(str)
     run_results = build_run(results_df, doc_id_col="doc_id")
 
     ## Evaluate runs
