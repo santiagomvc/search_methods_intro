@@ -72,18 +72,19 @@ index = faiss.IndexFlatL2(d)
 index.add(sent_embeddings)
 
 ## RAGatuille + Colbert
-try:
-    RAG = RAGPretrainedModel.from_index(".ragatouille/colbert/indexes/index")
-except:
-    RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
-    RAG.index(
-        index_name="index", 
-        collection=chunk_texts, 
-        document_ids=chunk_ids, 
-        use_faiss=False,
-        max_document_length=1024,
-        split_documents=False,
-    )
+if __name__ == "__main__":
+    try:
+        RAG = RAGPretrainedModel.from_index(".ragatouille/colbert/indexes/index")
+    except:
+        RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
+        RAG.index(
+            index_name="index", 
+            collection=chunk_texts, 
+            document_ids=chunk_ids, 
+            use_faiss=False,
+            max_document_length=1024,
+            split_documents=False,
+        )
 
 
 # Search Functions
