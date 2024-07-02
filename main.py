@@ -12,8 +12,8 @@ def text_preprocess(text):
     text = text.lower()
     return text
 
-def build_run(run_df, doc_id_col="chunk_id", query_id=0):
-    run_df["query_id"] = str(query_id)
+def build_run(df, doc_id_col="chunk_id"):
+    run_df = df.copy()
     run = Run.from_df(
         df=run_df,
         q_id_col="query_id",
@@ -102,7 +102,7 @@ def bm25_search(query_text, bm25=bm25, df=df):
     return bm25_df
 
 # Sentence vector search
-def single_vector_search(query_text, index=index, df=df, k=5):
+def sentsim_search(query_text, index=index, df=df, k=5):
     sent_query_emb = sent_model.encode(query_text).reshape(1,-1)
     D, I = index.search(sent_query_emb, k)
     sent_df = df.loc[I[0]]
@@ -125,13 +125,15 @@ def colbert_search(query_text, RAG=RAG, df=df):
     return colbert_df
 
 # Fusion rank search
-def combined_search(query_text, norm="min-max", method="max", query_id=0):
+def combined_search(query_text, norm="min-max", method="max"):
     bm25_df = bm25_search(query_text)
-    sent_df = single_vector_search(query_text)
+    sent_df = sentsim_search(query_text)
     colbert_df = colbert_search(query_text)
     runs = []
     # Save results in Run format
     for run_df in [bm25_df, sent_df, colbert_df]:
+        # Adds a random query id since it's necessary for the run
+        run_df["query_id"] = "0"
         run = build_run(run_df)
         runs.append(run)
     ## Combining scores
@@ -150,25 +152,47 @@ def combined_search(query_text, norm="min-max", method="max", query_id=0):
     ## Return similar format to other responses
     return combined_run_df
 
-query_text="juneteenth"
-query_id="0"
-# results_df = bm25_search(query_text, bm25=bm25, df=df)
-# results_df = single_vector_search(query_text, index=index, df=df)
-# results_df = colbert_search(query_text, RAG=RAG, df=df)
-results_df = combined_search(query_text)
-run_results = build_run(results_df, doc_id_col="doc_id", query_id=query_id)
 
-# Create Qrel for evaluation
-queries_df["query_id"] = queries_df["query_id"].astype(str)
-# Replace all positive score with 1 for simplicity
-queries_df.loc[queries_df["score"] > 0, "score"] = 1
-qrels_df = queries_df.loc[queries_df["query_id"]==query_id]
-qrels = Qrels.from_df(
-    df=qrels_df,
-    q_id_col="query_id",
-    doc_id_col="doc_id",
-    score_col="score",
-)
+def search(query_text, mode="bm25"):
+    if mode=="bm25":
+        results_df = bm25_search(query_text)
+    elif mode=="sentsim":
+        results_df = sentsim_search(query_text)
+    elif mode=="colbert":
+        results_df = colbert_search(query_text)
+    elif mode=="combined":
+        results_df = combined_search(query_text)
+    return results_df
 
-## Evaluate runs
-evaluate(qrels, run_results, ["ndcg@5", "mrr"])
+
+def evaluate_search(mode="bm25", queries_df=queries_df):
+    # Create Qrel for evaluation
+    queries_df["query_id"] = queries_df["query_id"].astype(str)
+    queries_df.loc[queries_df["score"] > 0, "score"] = 1
+    # Replace all positive score with 1 for simplicity
+    qrels = Qrels.from_df(
+        df=queries_df,
+        q_id_col="query_id",
+        doc_id_col="doc_id",
+        score_col="score",
+    )
+
+    results_list = []
+    queries_list = queries_df[["query_id", "query_text"]].drop_duplicates().values.tolist()
+    # Get search responses
+    for query_id, query_text in queries_list:
+        response_df = search(query_text, mode=mode)
+        response_df["query_id"] = query_id
+        results_list.append(response_df)
+
+    results_df = pd.concat(results_list)
+    run_results = build_run(results_df, doc_id_col="doc_id")
+
+    ## Evaluate runs
+    metrics = evaluate(qrels, run_results, ["ndcg@5", "mrr"])
+    print(mode, metrics)
+
+evaluate_search(mode="bm25")
+evaluate_search(mode="sentsim")
+evaluate_search(mode="colbert")
+evaluate_search(mode="combined")
