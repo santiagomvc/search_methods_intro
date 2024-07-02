@@ -1,2 +1,4 @@
+# Ignores ragatouille index
 .ragatouille/
+# Ignores mac Finder info
 .DS_Store
